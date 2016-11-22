@@ -3,71 +3,65 @@
  *
  * (C) Copyright 2016 Jernej Skrabec <jernej.skrabec@siol.net>
  *
- * Based on work by:
+ * Based on Linux DRM driver defines:
  * Copyright (C) 2016 Jean-Francois Moine <moinejf@free.fr>
  * Copyright (c) 2016 Allwinnertech Co., Ltd.
+ * 
+ * Based on display.h:
+ * (C) Copyright 2014 Hans de Goede <hdegoede@redhat.com>
  * 
  * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#ifndef _SUNXI_DISPLAY_H
-#define _SUNXI_DISPLAY_H
+#ifndef _SUNXI_DISPLAY2_H
+#define _SUNXI_DISPLAY2_H
 
-struct sun8i_lcdc_reg {
-	u32 gctl;
-	u32 gint0;
-	u32 gint1;
-	u32 dum0[13];
-	u32 tcon0_ctl;				/* 0x40 */
-	u32 dum1[19];
-	u32 tcon1_ctl;				/* 0x90 */
-	u32 basic0;			/* XI/YI */
-	u32 basic1;			/* LS_XO/LS_YO */
-	u32 basic2;			/* XO/YO */
-	u32 basic3;			/* HT/HBP */
-	u32 basic4;			/* VT/VBP */
-	u32 basic5;			/* HSPW/VSPW */
-	u32 dum2;
-	u32 ps_sync;				/* 0xb0 */
-	u32 dum3[15];
-	u32 io_pol;				/* 0xf0 */
-	u32 io_tri;
-	u32 dum4[2];
-
-	u32 ceu_ctl;				/* 0x100 */
-	u32 dum5[3];
-	u32 ceu_rr;
-	u32 ceu_rg;
-	u32 ceu_rb;
-	u32 ceu_rc;
-	u32 ceu_gr;
-	u32 ceu_gg;
-	u32 ceu_gb;
-	u32 ceu_gc;
-	u32 ceu_br;
-	u32 ceu_bg;
-	u32 ceu_bb;
-	u32 ceu_bc;
-	u32 ceu_rv;
-	u32 ceu_gv;
-	u32 ceu_bv;
-	u32 dum6[45];
-
-	u32 mux_ctl;				/* 0x200 */
-	u32 dum7[63];
-
-	u32 fill_ctl;				/* 0x300 */
-	u32 fill_start0;
-	u32 fill_end0;
-	u32 fill_data0;
-};
+struct sunxi_lcdc_reg {
+	u32 ctrl;			/* 0x00 */
+	u32 int0;			/* 0x04 */
+	u32 int1;			/* 0x08 */
+	u8 res0[0x04];			/* 0x0c */
+	u32 tcon0_frm_ctrl;		/* 0x10 */
+	u32 tcon0_frm_seed[6];		/* 0x14 */
+	u32 tcon0_frm_table[4];		/* 0x2c */
+	u8 res1[4];			/* 0x3c */
+	u32 tcon0_ctrl;			/* 0x40 */
+	u32 tcon0_dclk;			/* 0x44 */
+	u32 tcon0_timing_active;	/* 0x48 */
+	u32 tcon0_timing_h;		/* 0x4c */
+	u32 tcon0_timing_v;		/* 0x50 */
+	u32 tcon0_timing_sync;		/* 0x54 */
+	u32 tcon0_hv_intf;		/* 0x58 */
+	u8 res2[0x04];			/* 0x5c */
+	u32 tcon0_cpu_intf;		/* 0x60 */
+	u32 tcon0_cpu_wr_dat;		/* 0x64 */
+	u32 tcon0_cpu_rd_dat0;		/* 0x68 */
+	u32 tcon0_cpu_rd_dat1;		/* 0x6c */
+	u32 tcon0_ttl_timing0;		/* 0x70 */
+	u32 tcon0_ttl_timing1;		/* 0x74 */
+	u32 tcon0_ttl_timing2;		/* 0x78 */
+	u32 tcon0_ttl_timing3;		/* 0x7c */
+	u32 tcon0_ttl_timing4;		/* 0x80 */
+	u32 tcon0_lvds_intf;		/* 0x84 */
+	u32 tcon0_io_polarity;		/* 0x88 */
+	u32 tcon0_io_tristate;		/* 0x8c */
+	u32 tcon1_ctrl;			/* 0x90 */
+	u32 tcon1_timing_source;	/* 0x94 */
+	u32 tcon1_timing_scale;		/* 0x98 */
+	u32 tcon1_timing_out;		/* 0x9c */
+	u32 tcon1_timing_h;		/* 0xa0 */
+	u32 tcon1_timing_v;		/* 0xa4 */
+	u32 tcon1_timing_sync;		/* 0xa8 */
+	u8 res3[0x44];			/* 0xac */
+	u32 tcon1_io_polarity;		/* 0xf0 */
+	u32 tcon1_io_tristate;		/* 0xf4 */
+	u8 res4[0x108];			/* 0xf8 */
+	u32 mux_ctrl;			/* 0x200 */};
 
 /* global control */
 struct de_glb {
 	u32 ctl;
 #define		DE_MUX_GLB_CTL_rt_en BIT(0)
-#define		DE_MUX_GLB_CTL_finish_irq_en BIT(4)
-#define		DE_MUX_GLB_CTL_rtwb_port BIT(12)
 	u32 status;
 	u32 dbuff;
 	u32 size;
@@ -149,21 +143,26 @@ struct de_ui {
 	u32 ovl_size;			/* 88 */
 };
 
-#define HDMI_EDID_BLOCK_SIZE 			128
+struct sunxi_phy_hdmi_reg {
+	u32 pol;
+	u32 dum0[3];
+	u32 read_en;
+	u32 dum1[3];
+	u32 ctrl;
+	u32 unk1;
+	u32 unk2;
+	u32 pll;
+	u32 clk;
+	u32 unk3;
+	u32 status;
+};
 
 /*
  * HDMI register addresses
  */
-#define SUN8I_HDMI_PHY_CTRL_REG			(u32*)(SUNXI_HDMI_BASE + 0x10020)
-#define SUN8I_HDMI_PHY_UNK1_REG			(u32*)(SUNXI_HDMI_BASE + 0x10024)
-#define SUN8I_HDMI_PHY_UNK2_REG			(u32*)(SUNXI_HDMI_BASE + 0x10028)
-#define SUN8I_HDMI_PHY_PLL_REG			(u32*)(SUNXI_HDMI_BASE + 0x1002c)
-#define SUN8I_HDMI_PHY_CLK_REG			(u32*)(SUNXI_HDMI_BASE + 0x10030)
-#define SUN8I_HDMI_PHY_UNK3_REG			(u32*)(SUNXI_HDMI_BASE + 0x10034)
-#define SUN8I_HDMI_PHY_STATUS_REG		(u32*)(SUNXI_HDMI_BASE + 0x10038)
+#define SUN8I_HDMI_PHY_BASE			(u32*)(SUNXI_HDMI_BASE + 0x10000)
 
 #define SUN8I_HDMI_IH_I2CM_STAT0		(u32*)(SUNXI_HDMI_BASE + 0x0013)
-
 #define SUN8I_HDMI_I2CM_SLAVE			(u32*)(SUNXI_HDMI_BASE + 0x0EE0)
 #define SUN8I_HDMI_I2CM_ADDRESS			(u32*)(SUNXI_HDMI_BASE + 0x0EE1)
 #define SUN8I_HDMI_I2CM_DATAI			(u32*)(SUNXI_HDMI_BASE + 0x8EE1)
@@ -218,28 +217,10 @@ struct de_ui {
 /*
  * LCDC register constants.
  */
-#define SUN8I_TCON_GCTL_TCON_En			(1 << 31)
-#define SUN8I_TCON_GINT0_TCON1_Vb_Int_En	(1 << 30)
-#define SUN8I_TCON_GINT0_TCON1_Vb_Int_Flag	(1 << 14)
-#define SUN8I_TCON0_CTL_TCON_En			(1 << 31)
-#define SUN8I_TCON1_CTL_TCON_En			(1 << 31)
-#define SUN8I_TCON1_CTL_Interlace_En		(1 << 20)
-#define SUN8I_TCON1_CTL_Start_Delay_SHIFT	4
-/*#define SUN8I_TCON1_CTL_Start_Delay_MASK	GENMASK(8, 4)*/
-#define SUN8I_TCON1_IO_POL_IO0_inv		(1 << 24)
-#define SUN8I_TCON1_IO_POL_IO1_inv		(1 << 25)
-#define SUN8I_TCON1_IO_POL_IO2_inv		(1 << 26)
-#define SUN8I_TCON_CEU_CTL_ceu_en		(1 << 31)
-
 #define SUNXI_LCDC_X(x)				(((x) - 1) << 16)
 #define SUNXI_LCDC_Y(y)				(((y) - 1) << 0)
-#define SUNXI_LCDC_TCON_VSYNC_MASK		(1 << 24)
-#define SUNXI_LCDC_TCON_HSYNC_MASK		(1 << 25)
-#define SUNXI_LCDC_CTRL_IO_MAP_MASK		(1 << 0)
-#define SUNXI_LCDC_CTRL_IO_MAP_TCON0		(0 << 0)
-#define SUNXI_LCDC_CTRL_IO_MAP_TCON1		(1 << 0)
 #define SUNXI_LCDC_CTRL_TCON_ENABLE		(1 << 31)
-#define SUNXI_LCDC_TCON1_CTRL_SRC_BLUE		(1 << 1)
+#define SUNXI_LCDC_TCON0_CTRL_ENABLE		(1 << 31)
 #define SUNXI_LCDC_TCON1_CTRL_CLK_DELAY(n)	(((n) & 0x1f) << 4)
 #define SUNXI_LCDC_TCON1_CTRL_INTERLACE_ENABLE	(1 << 20)
 #define SUNXI_LCDC_TCON1_CTRL_ENABLE		(1 << 31)

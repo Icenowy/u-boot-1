@@ -282,7 +282,7 @@ extern int soft_i2c_gpio_scl;
 
 #define CONFIG_VIDEO_SUNXI
 #else
-#define CONFIG_VIDEO_SUNXI_H3
+#define CONFIG_VIDEO_SUNXI2
 #endif
 
 #define CONFIG_VIDEO_LOGO
