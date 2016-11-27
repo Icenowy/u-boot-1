@@ -46,7 +46,7 @@
 #define SUNXI_USB1_BASE			0x01c14000
 #endif
 #define SUNXI_SS_BASE			0x01c15000
-#ifndef CONFIG_MACH_SUN8I_H3
+#ifndef CONFIG_SUNXI_DE2
 #define SUNXI_HDMI_BASE			0x01c16000
 #endif
 #define SUNXI_SPI2_BASE			0x01c17000
@@ -165,7 +165,7 @@ defined(CONFIG_MACH_SUN50I)
 #define SUNXI_MP_BASE			0x01e80000
 #define SUNXI_AVG_BASE			0x01ea0000
 
-#ifdef CONFIG_MACH_SUN8I_H3
+#ifdef CONFIG_SUNXI_DE2
 #define SUNXI_HDMI_BASE			0x01ee0000
 #endif
 
