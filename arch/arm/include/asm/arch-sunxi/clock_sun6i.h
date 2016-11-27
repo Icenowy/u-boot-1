@@ -67,7 +67,7 @@ struct sunxi_ccm_reg {
 	u32 dram_pll_cfg;	/* 0xf8 PLL_DDR cfg register, A33 only */
 	u32 mbus_reset;		/* 0xfc MBUS reset control, A33 only */
 	u32 dram_clk_gate;	/* 0x100 DRAM module gating */
-#ifdef CONFIG_MACH_SUN8I
+#ifdef CONFIG_SUNXI_DE2
 	u32 de_clk_cfg;		/* 0x104 DE module clock */
 #else
 	u32 be0_clk_cfg;	/* 0x104 BE0 module clock */
@@ -76,7 +76,7 @@ struct sunxi_ccm_reg {
 	u32 fe0_clk_cfg;	/* 0x10c FE0 module clock */
 	u32 fe1_clk_cfg;	/* 0x110 FE1 module clock */
 	u32 mp_clk_cfg;		/* 0x114 MP module clock */
-#ifdef CONFIG_MACH_SUN8I
+#ifdef CONFIG_SUNXI_DE2
 	u32 tcon0_clk_cfg;	/* 0x118 TCON0 module clock */
 #else
 	u32 lcd0_ch0_clk_cfg;	/* 0x118 LCD0 CH0 module clock */
@@ -93,7 +93,7 @@ struct sunxi_ccm_reg {
 	u32 dmic_clk_cfg;	/* 0x148 Digital Mic module clock*/
 	u32 reserved15;
 	u32 hdmi_clk_cfg;	/* 0x150 HDMI module clock */
-#ifdef CONFIG_MACH_SUN8I
+#ifdef CONFIG_SUNXI_DE2
 	u32 hdmi_slow_clk_cfg;	/* 0x154 HDMI slow module clock */
 #else
 	u32 ps_clk_cfg;		/* 0x154 PS module clock */
@@ -440,7 +440,7 @@ struct sunxi_ccm_reg {
 
 /* CCM bits common to all Display Engine (and IEP) clock ctrl regs */
 #define CCM_DE_CTRL_M(n)		((((n) - 1) & 0xf) << 0)
-#ifndef CONFIG_MACH_SUN8I
+#ifndef CONFIG_SUNXI_DE2
 #define CCM_DE_CTRL_PLL_MASK		(0xf << 24)
 #define CCM_DE_CTRL_PLL3		(0 << 24)
 #define CCM_DE_CTRL_PLL7		(1 << 24)

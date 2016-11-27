@@ -26,6 +26,10 @@
 	#define CONFIG_SUNXI_USB_PHYS	2
 #endif
 
+#if defined(CONFIG_MACH_SUN8I_H3)
+	#define CONFIG_SUNXI_DE2	1
+#endif
+
 /*
  * Include common sunxi configuration where most the settings are
  */
