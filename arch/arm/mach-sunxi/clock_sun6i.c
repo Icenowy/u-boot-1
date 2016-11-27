@@ -295,7 +295,7 @@ unsigned int clock_get_mipi_pll(void)
 	return ((src / 1000) * n * k / m) * 1000;
 }
 
-#ifndef CONFIG_MACH_SUN8I
+#ifndef CONFIG_SUNXI_DE2
 void clock_set_de_mod_clock(u32 *clk_cfg, unsigned int hz)
 {
 	int pll = clock_get_pll6() * 2;
