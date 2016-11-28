@@ -284,9 +284,8 @@ extern int soft_i2c_gpio_scl;
 #define CONFIG_SUNXI_MAX_FB_SIZE (16 << 20)
 
 /* Do we want to initialize a simple FB? */
-#ifndef CONFIG_MACH_SUN8I_H3
 #define CONFIG_VIDEO_DT_SIMPLEFB
-
+#ifndef CONFIG_MACH_SUN8I_H3
 #define CONFIG_VIDEO_SUNXI
 #else
 #define CONFIG_VIDEO_SUNXI2
