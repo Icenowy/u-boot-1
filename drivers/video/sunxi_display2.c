@@ -50,7 +50,7 @@ struct sunxi_display {
 static void sunxi_hdmi_phy_init(void)
 {
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 	unsigned long tmo;
 	u32 tmp;
 
@@ -101,38 +101,12 @@ static void sunxi_hdmi_phy_init(void)
 	/* enable read access to HDMI controller*/
 	writel(0x54524545, &phy->read_en);
 
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8080);
-
+	/* soft reset HDMI controller */
+	writeb(0x00, SUNXI_HDMI_MC_SWRSTZ);
 	udelay(1);
-
-	writeb(0x00, SUNXI_HDMI_BASE + 0xF01F);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8403);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x904C);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x904E);
-	writeb(0xff, SUNXI_HDMI_BASE + 0xD04C);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8250);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8A50);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8272);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x40C0);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x86F0);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x0EE3);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8EE2);
-	writeb(0xf0, SUNXI_HDMI_BASE + 0xA049);
-	writeb(0x1e, SUNXI_HDMI_BASE + 0xB045);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x00C1);
-	writeb(0x03, SUNXI_HDMI_BASE + 0x00C1);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x00C0);
-	writeb(0x10, SUNXI_HDMI_BASE + 0x40C1);
-	writeb(0xfd, SUNXI_HDMI_BASE + 0x0081);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x0081);
-	writeb(0xfd, SUNXI_HDMI_BASE + 0x0081);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x0010);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x0011);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8010);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8011);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x0013);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8012);
-	writeb(0xff, SUNXI_HDMI_BASE + 0x8013);
+	writeb(0x03, SUNXI_HDMI_IH_MUTE);
+	writeb(0xff, SUNXI_HDMI_I2CM_CTLINT);
+	writeb(0xfd, SUNXI_HDMI_MC_CLKDIS);
 }
 
 static int sunxi_hdmi_hpd_detect(int hpd_delay)
@@ -140,7 +114,7 @@ static int sunxi_hdmi_hpd_detect(int hpd_delay)
 	struct sunxi_ccm_reg * const ccm =
 		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 	unsigned long tmo = timer_get_us() + hpd_delay * 1000;
 	int status = 0;
 
@@ -177,7 +151,7 @@ static void sunxi_hdmi_shutdown(void)
 	struct sunxi_ccm_reg * const ccm =
 		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 
 	writel(0, &phy->ctrl);
 	clrbits_le32(&ccm->hdmi_clk_cfg, CCM_HDMI_CTRL_GATE);
@@ -195,8 +169,8 @@ static int sunxi_hdmi_ddc_wait_i2c_done(int msec)
 
 	start = get_timer(0);
 	do {
-		val = readb(SUN8I_HDMI_IH_I2CM_STAT0);
-		writeb(val, SUN8I_HDMI_IH_I2CM_STAT0);
+		val = readb(SUNXI_HDMI_IH_I2CM_STAT0);
+		writeb(val, SUNXI_HDMI_IH_I2CM_STAT0);
 
 		if (val & 0x2)
 			return 0;
@@ -217,21 +191,21 @@ static int sunxi_hdmi_ddc_read(int block, u8 *buf)
 	u32 op = (block == 0) ? 1 : 2;
 	int n;
 
-	writeb(block >> 1, SUN8I_HDMI_I2CM_SEGPTR);
+	writeb(block >> 1, SUNXI_HDMI_I2CM_SEGPTR);
 
 	while (trytime--) {
 		edid_read_err = 0;
 
 		for (n = 0; n < 128; n++) {
-			writeb(shift + n, SUN8I_HDMI_I2CM_ADDRESS);
-			writeb(op, SUN8I_HDMI_I2CM_OPERATION);
+			writeb(shift + n, SUNXI_HDMI_I2CM_ADDRESS);
+			writeb(op, SUNXI_HDMI_I2CM_OPERATION);
 
 			if (sunxi_hdmi_ddc_wait_i2c_done(10)) {
 				edid_read_err = 1;
 				break;
 			}
 
-			*buf++ = readb(SUN8I_HDMI_I2CM_DATAI);
+			*buf++ = readb(SUNXI_HDMI_I2CM_DATAI);
 		}
 
 		if (!edid_read_err)
@@ -268,14 +242,14 @@ static int sunxi_hdmi_edid_get_mode(struct ctfb_res_modes *mode)
 	int i, r, ext_blocks = 0;
 
 	/* Reset i2c controller */
-	writeb(0, SUN8I_HDMI_I2CM_SOFTRSTZ);
+	writeb(0, SUNXI_HDMI_I2CM_SOFTRSTZ);
 
-	writeb(0x05, SUN8I_HDMI_I2CM_DIV);
-	writeb(0x08, SUN8I_HDMI_I2CM_INT);
-	writeb(0xd8, SUN8I_HDMI_I2CM_SS_SCL_HCNT_0_ADDR);
-	writeb(0xfe, SUN8I_HDMI_I2CM_SS_SCL_LCNT_0_ADDR);
-	writeb(SUN8I_HMDI_DDC_ADDR_SLAVE_ADDR, SUN8I_HDMI_I2CM_SLAVE);
-	writeb(SUN8I_HMDI_DDC_ADDR_SEG_ADDR, SUN8I_HDMI_I2CM_SEGADDR);
+	writeb(0x05, SUNXI_HDMI_I2CM_DIV);
+	writeb(0x08, SUNXI_HDMI_I2CM_INT);
+	writeb(0xd8, SUNXI_HDMI_I2CM_SS_SCL_HCNT_0_ADDR);
+	writeb(0xfe, SUNXI_HDMI_I2CM_SS_SCL_LCNT_0_ADDR);
+	writeb(SUN8I_HMDI_DDC_ADDR_SLAVE_ADDR, SUNXI_HDMI_I2CM_SLAVE);
+	writeb(SUN8I_HMDI_DDC_ADDR_SEG_ADDR, SUNXI_HDMI_I2CM_SEGADDR);
 
 	r = sunxi_hdmi_edid_get_block(0, (u8 *)&edid1);
 	if (r == 0) {
@@ -599,16 +573,16 @@ static void sunxi_hdmi_setup_info_frames(const struct ctfb_res_modes *mode)
 	else
 		tmp |= 0x28; /* 16 : 9 */
 
-	setbits_8(SUNXI_HDMI_BASE + 0x0040, 0x08);
-	writeb(0x60, SUNXI_HDMI_BASE + 0x4045);
-	writeb(tmp, SUNXI_HDMI_BASE + 0xC044);
-	writeb(0x88, SUNXI_HDMI_BASE + 0xC045);
+	setbits_8(SUNXI_HDMI_FC_INVIDCONF, 0x08);
+	writeb(0x60, SUNXI_HDMI_FC_AVICONF0);
+	writeb(tmp, SUNXI_HDMI_FC_AVICONF1);
+	writeb(0x88, SUNXI_HDMI_FC_AVICONF2);
 }
 
 static void sunxi_hdmi_phy_set(u32 divider)
 {
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 	u32 tmp;
 
 	/* 
@@ -683,7 +657,7 @@ static void sunxi_hdmi_mode_set(const struct ctfb_res_modes *mode,
 				int clk_div)
 {
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 	u8 invidconf, v_blanking;
 	u32 h_blanking;
 
@@ -700,58 +674,58 @@ static void sunxi_hdmi_mode_set(const struct ctfb_res_modes *mode,
 	h_blanking = mode->left_margin + mode->right_margin + mode->hsync_len;
 	v_blanking = mode->upper_margin + mode->lower_margin + mode->vsync_len;
 
-	writeb(invidconf | 0x10, SUNXI_HDMI_BASE + 0x0040);
+	writeb(invidconf | 0x10, SUNXI_HDMI_FC_INVIDCONF);
 	if (invidconf < 96)
 		setbits_le32(&phy->pol, 0x300);
 
-	writeb(mode->xres >> 8, SUNXI_HDMI_BASE + 0x8040);
-	writeb(mode->xres, SUNXI_HDMI_BASE + 0x0041);
-	writeb(mode->yres >> 8, SUNXI_HDMI_BASE + 0x8042);
-	writeb(mode->yres, SUNXI_HDMI_BASE + 0x0043);
-	writeb(mode->vsync_len, SUNXI_HDMI_BASE + 0x4043);
-	writeb(h_blanking >> 8, SUNXI_HDMI_BASE + 0x0042);
-	writeb(h_blanking, SUNXI_HDMI_BASE + 0x8041);
-	writeb(mode->lower_margin, SUNXI_HDMI_BASE + 0x4042);
-	writeb(mode->right_margin >> 8, SUNXI_HDMI_BASE + 0x4041);
-	writeb(mode->right_margin, SUNXI_HDMI_BASE + 0x4040);
-	writeb(mode->hsync_len >> 8, SUNXI_HDMI_BASE + 0xC041);
-	writeb(mode->hsync_len, SUNXI_HDMI_BASE + 0xC040);
-	writeb(v_blanking, SUNXI_HDMI_BASE + 0x8043);
+	writeb(mode->xres, SUNXI_HDMI_FC_INHACTV0);
+	writeb(mode->xres >> 8, SUNXI_HDMI_FC_INHACTV1);
+	writeb(mode->yres, SUNXI_HDMI_FC_INVACTV0);
+	writeb(mode->yres >> 8, SUNXI_HDMI_FC_INVACTV1);
+	writeb(mode->vsync_len, SUNXI_HDMI_FC_VSYNCINWIDTH);
+	writeb(h_blanking, SUNXI_HDMI_FC_INHBLANK0);
+	writeb(h_blanking >> 8, SUNXI_HDMI_FC_INHBLANK1);
+	writeb(mode->lower_margin, SUNXI_HDMI_FC_VSYNCINDELAY);
+	writeb(mode->right_margin, SUNXI_HDMI_FC_HSYNCINDELAY0);
+	writeb(mode->right_margin >> 8, SUNXI_HDMI_FC_HSYNCINDELAY1);
+	writeb(mode->hsync_len, SUNXI_HDMI_FC_HSYNCINWIDTH0);
+	writeb(mode->hsync_len >> 8, SUNXI_HDMI_FC_HSYNCINWIDTH1);
+	writeb(v_blanking, SUNXI_HDMI_FC_INVBLANK);
 
-	writeb(0x0c, SUNXI_HDMI_BASE + 0x0045);
-	writeb(0x20, SUNXI_HDMI_BASE + 0x8044);
-	writeb(0x01, SUNXI_HDMI_BASE + 0x8045);
-	writeb(0x0b, SUNXI_HDMI_BASE + 0x0046);
-	writeb(0x16, SUNXI_HDMI_BASE + 0x0047);
-	writeb(0x21, SUNXI_HDMI_BASE + 0x8046);
+	writeb(0x0c, SUNXI_HDMI_FC_CTRLDUR);
+	writeb(0x20, SUNXI_HDMI_FC_EXCTRLDUR);
+	writeb(0x01, SUNXI_HDMI_FC_EXCTRLSPAC);
+	writeb(0x0b, SUNXI_HDMI_FC_CH0PREAM);
+	writeb(0x16, SUNXI_HDMI_FC_CH1PREAM);
+	writeb(0x21, SUNXI_HDMI_FC_CH2PREAM);
 
-	writeb(0x40, SUNXI_HDMI_BASE + 0x0401);
-	writeb(0x07, SUNXI_HDMI_BASE + 0x8400);
+	writeb(0x40, SUNXI_HDMI_VP_PR_CD);
+	writeb(0x07, SUNXI_HDMI_VP_STUFF);
 
 	// default value, written 0 by rk_hdmi
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8401);
+	writeb(0x00, SUNXI_HDMI_VP_REMAP);
 
-	writeb(0x47, SUNXI_HDMI_BASE + 0x0402);
-	writeb(0x01, SUNXI_HDMI_BASE + 0x0800);
-	writeb(0x07, SUNXI_HDMI_BASE + 0x0801);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8800);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8801);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x0802);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x0803);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8802);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x8803);
+	writeb(0x47, SUNXI_HDMI_VP_CONF);
+	writeb(0x01, SUNXI_HDMI_TX_INVID0);
+	writeb(0x07, SUNXI_HDMI_TX_INSTUFFING);
+	writeb(0x00, SUNXI_HDMI_TX_GYDATA0);
+	writeb(0x00, SUNXI_HDMI_TX_GYDATA1);
+	writeb(0x00, SUNXI_HDMI_TX_RCRDATA0);
+	writeb(0x00, SUNXI_HDMI_TX_RCRDATA1);
+	writeb(0x00, SUNXI_HDMI_TX_BCBDATA0);
+	writeb(0x00, SUNXI_HDMI_TX_BCBDATA1);
 
 	if (sunxi_display.monitor == sunxi_monitor_hdmi)
 		sunxi_hdmi_setup_info_frames(mode);
 
-	writeb(0x00, SUNXI_HDMI_BASE + 0x0082);
-	writeb(0x00, SUNXI_HDMI_BASE + 0x0081);
+	writeb(0x00, SUNXI_HDMI_MC_FLOWCTRL);
+	writeb(0x74, SUNXI_HDMI_MC_CLKDIS);
 }
 
 static void sunxi_hdmi_enable(void)
 {
 	struct sunxi_phy_hdmi_reg * const phy =
-		(struct sunxi_phy_hdmi_reg *)SUN8I_HDMI_PHY_BASE;
+		(struct sunxi_phy_hdmi_reg *)SUNXI_HDMI_PHY_BASE;
 
 	setbits_le32(&phy->ctrl, 0xf << 12);
 	printf("hdmi enabled\n");
