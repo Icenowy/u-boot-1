@@ -78,10 +78,11 @@ struct sunxi_ccm_reg {
 	u32 mp_clk_cfg;		/* 0x114 MP module clock */
 #ifdef CONFIG_SUNXI_DE2
 	u32 tcon0_clk_cfg;	/* 0x118 TCON0 module clock */
+	u32 tcon1_clk_cfg;	/* 0x11c TCON1 module clock */
 #else
 	u32 lcd0_ch0_clk_cfg;	/* 0x118 LCD0 CH0 module clock */
-#endif
 	u32 lcd1_ch0_clk_cfg;	/* 0x11c LCD1 CH0 module clock */
+#endif
 	u32 reserved14[3];
 	u32 lcd0_ch1_clk_cfg;	/* 0x12c LCD0 CH1 module clock */
 	u32 lcd1_ch1_clk_cfg;	/* 0x130 LCD1 CH1 module clock */

@@ -1,3 +1,5 @@
+#define DEBUG
+
 /*
  * Display driver for sunxi Allwinner SoCs with DE2.
  * 
@@ -350,6 +352,7 @@ static void sunxi_composer_init(void)
 	/* Set DE parent to pll10 */
 	clrsetbits_le32(&ccm->de_clk_cfg, CCM_DE_CTRL_PLL_MASK,
 			CCM_DE_CTRL_PLL10);
+	clrsetbits_le32(&ccm->de_clk_cfg, 0xf, 0);
 
 	/* Set ahb gating to pass */
 	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_DE);
@@ -492,8 +495,13 @@ static void sunxi_lcdc_pll_set(int dotclock, int *clk_div)
 		dotclock, (clock_get_pll3() / 1000) / x,
 		best_n, best_m, x);
 
+#if defined(CONFIG_MACH_SUN8I_H3)
 	writel(CCM_TCON0_CTRL_GATE | CCM_TCON0_CTRL_M(x),
 	       &ccm->tcon0_clk_cfg);
+#else
+	writel(CCM_TCON0_CTRL_GATE | CCM_TCON0_CTRL_M(x),
+	       &ccm->tcon1_clk_cfg);
+#endif
 
 	*clk_div = x;
 }
@@ -503,14 +511,22 @@ static void sunxi_lcdc_init(void)
 	struct sunxi_ccm_reg * const ccm =
 		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
 	struct sunxi_lcdc_reg * const lcdc =
+#if defined(CONFIG_MACH_SUN8I_H3)
 		(struct sunxi_lcdc_reg *)SUNXI_LCD0_BASE;
+#else
+		(struct sunxi_lcdc_reg *)SUNXI_LCD1_BASE;
+#endif
 
-	/* Reset off */
+	/* Reset off , bus gate on then enable the mod clock*/
+#if defined(CONFIG_MACH_SUN8I_H3)
 	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_TCON0);
-
-	/* Clock on */
 	setbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_TCON0);
 	setbits_le32(&ccm->tcon0_clk_cfg, CCM_TCON0_CTRL_GATE);
+#else
+	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_TCON1);
+	setbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_TCON1);
+	setbits_le32(&ccm->tcon1_clk_cfg, CCM_TCON0_CTRL_GATE);
+#endif
 
 	/* Init lcdc */
 	writel(0, &lcdc->ctrl); /* Disable tcon */
@@ -523,7 +539,11 @@ static void sunxi_lcdc_init(void)
 static void sunxi_lcdc_enable(void)
 {
 	struct sunxi_lcdc_reg * const lcdc =
+#if defined(CONFIG_MACH_SUN8I_H3)
 		(struct sunxi_lcdc_reg *)SUNXI_LCD0_BASE;
+#else
+		(struct sunxi_lcdc_reg *)SUNXI_LCD1_BASE;
+#endif
 
 	setbits_le32(&lcdc->ctrl, SUNXI_LCDC_CTRL_TCON_ENABLE);
 }
@@ -545,7 +565,11 @@ static void sunxi_lcdc_tcon1_mode_set(const struct ctfb_res_modes *mode,
 				      int *clk_div)
 {
 	struct sunxi_lcdc_reg * const lcdc =
+#if defined(CONFIG_MACH_SUN8I_H3)
 		(struct sunxi_lcdc_reg *)SUNXI_LCD0_BASE;
+#else
+		(struct sunxi_lcdc_reg *)SUNXI_LCD1_BASE;
+#endif
 	int bp, clk_delay, total, yres;
 
 	clk_delay = sunxi_lcdc_get_clk_delay(mode);
