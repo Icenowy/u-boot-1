@@ -9,6 +9,7 @@
 #ifndef _SUNXI_DISPLAY_H
 #define _SUNXI_DISPLAY_H
 
+#ifndef CONFIG_SUNXI_DE2
 struct sunxi_de_fe_reg {
 	u32 enable;			/* 0x000 */
 	u32 frame_ctrl;			/* 0x004 */
@@ -156,6 +157,84 @@ struct sunxi_de_be_reg {
 	u8 res6[0xc];			/* 0x9c4 */
 	u32 output_color_coef[12];	/* 0x9d0 */
 };
+#else
+/* internal clock settings */
+struct de_clk {
+	u32 gate_cfg;
+	u32 bus_cfg;
+	u32 rst_cfg;
+	u32 div_cfg;
+	u32 sel_cfg;
+};
+
+/* global control */
+struct de_glb {
+	u32 ctl;
+	u32 status;
+	u32 dbuff;
+	u32 size;
+};
+
+/* alpha blending */
+struct de_bld {
+	u32 fcolor_ctl;			/* 00 */
+	struct {
+		u32 fcolor;
+		u32 insize;
+		u32 offset;
+		u32 dum;
+	} attr[4];
+	u32 dum0[15];			/* (end of clear offset) */
+	u32 route;			/* 80 */
+	u32 premultiply;
+	u32 bkcolor;
+	u32 output_size;
+	u32 bld_mode[4];
+	u32 dum1[4];
+	u32 ck_ctl;			/* b0 */
+	u32 ck_cfg;
+	u32 dum2[2];
+	u32 ck_max[4];			/* c0 */
+	u32 dum3[4];
+	u32 ck_min[4];			/* e0 */
+	u32 dum4[3];
+	u32 out_ctl;			/* fc */
+};
+
+/* VI channel */
+struct de_vi {
+	struct {
+		u32 attr;
+		u32 size;
+		u32 coord;
+		u32 pitch[3];
+		u32 top_laddr[3];
+		u32 bot_laddr[3];
+	} cfg[4];
+	u32 fcolor[4];			/* c0 */
+	u32 top_haddr[3];		/* d0 */
+	u32 bot_haddr[3];		/* dc */
+	u32 ovl_size[2];		/* e8 */
+	u32 hori[2];			/* f0 */
+	u32 vert[2];			/* f8 */
+};
+
+struct de_ui {
+	struct {
+		u32 attr;
+		u32 size;
+		u32 coord;
+		u32 pitch;
+		u32 top_laddr;
+		u32 bot_laddr;
+		u32 fcolor;
+		u32 dum;
+	} cfg[4];			/* 00 */
+	u32 top_haddr;			/* 80 */
+	u32 bot_haddr;
+	u32 ovl_size;			/* 88 */
+};
+#endif /* !CONFIG_SUNXI_DE2 */
 
 struct sunxi_lcdc_reg {
 	u32 ctrl;			/* 0x00 */
@@ -270,6 +349,158 @@ struct sunxi_hdmi_reg {
 #endif
 };
 
+struct sunxi_dwc_hdmi {
+	u8 reserved0[0x100];
+	u8 ih_fc_stat0;
+	u8 ih_fc_stat1;
+	u8 ih_fc_stat2;
+	u8 ih_as_stat0;
+	u8 ih_phy_stat0;
+	u8 ih_i2cm_stat0;
+	u8 ih_cec_stat0;
+	u8 ih_vp_stat0;
+	u8 ih_i2cmphy_stat0;
+	u8 ih_ahbdmaaud_stat0;
+	u8 reserved1[0x17f-0x109];
+	u8 ih_mute_fc_stat0;
+	u8 ih_mute_fc_stat1;
+	u8 ih_mute_fc_stat2;
+	u8 ih_mute_as_stat0;
+	u8 ih_mute_phy_stat0;
+	u8 ih_mute_i2cm_stat0;
+	u8 ih_mute_cec_stat0;
+	u8 ih_mute_vp_stat0;
+	u8 ih_mute_i2cmphy_stat0;
+	u8 ih_mute_ahbdmaaud_stat0;
+	u8 reserved2[0x1fe - 0x189];
+	u8 ih_mute;
+	u8 tx_invid0;
+	u8 tx_instuffing;
+	u8 tx_gydata0;
+	u8 tx_gydata1;
+	u8 tx_rcrdata0;
+	u8 tx_rcrdata1;
+	u8 tx_bcbdata0;
+	u8 tx_bcbdata1;
+	u8 reserved3[0x7ff-0x207];
+	u8 vp_status;
+	u8 vp_pr_cd;
+	u8 vp_stuff;
+	u8 vp_remap;
+	u8 vp_conf;
+	u8 vp_stat;
+	u8 vp_int;
+	u8 vp_mask;
+	u8 vp_pol;
+	u8 reserved4[0xfff-0x808];
+	u8 fc_invidconf;
+	u8 fc_inhactv0;
+	u8 fc_inhactv1;
+	u8 fc_inhblank0;
+	u8 fc_inhblank1;
+	u8 fc_invactv0;
+	u8 fc_invactv1;
+	u8 fc_invblank;
+	u8 fc_hsyncindelay0;
+	u8 fc_hsyncindelay1;
+	u8 fc_hsyncinwidth0;
+	u8 fc_hsyncinwidth1;
+	u8 fc_vsyncindelay;
+	u8 fc_vsyncinwidth;
+	u8 fc_infreq0;
+	u8 fc_infreq1;
+	u8 fc_infreq2;
+	u8 fc_ctrldur;
+	u8 fc_exctrldur;
+	u8 fc_exctrlspac;
+	u8 fc_ch0pream;
+	u8 fc_ch1pream;
+	u8 fc_ch2pream;
+	u8 fc_aviconf3;
+	u8 fc_gcp;
+	u8 fc_aviconf0;
+	u8 fc_aviconf1;
+	u8 fc_aviconf2;
+	u8 fc_avivid;
+	u8 fc_avietb0;
+	u8 fc_avietb1;
+	u8 fc_avisbb0;
+	u8 fc_avisbb1;
+	u8 fc_avielb0;
+	u8 fc_avielb1;
+	u8 fc_avisrb0;
+	u8 fc_avisrb1;
+	u8 fc_audiconf0;
+	u8 fc_audiconf1;
+	u8 fc_audiconf2;
+	u8 fc_audiconf3;
+	u8 fc_vsdieeeid0;
+	u8 fc_vsdsize;
+	u8 reserved5[0x30ff-0x102a];
+	u8 aud_conf0;
+	u8 aud_conf1;
+	u8 aud_int;
+	u8 aud_conf2;
+	u8 aud_int1;
+	u8 reserved6[0x31ff-0x3104];
+	u8 aud_n1;
+	u8 aud_n2;
+	u8 aud_n3;
+	u8 aud_cts1;
+	u8 aud_cts2;
+	u8 aud_cts3;
+	u8 aud_inputclkfs;
+	u8 reserved7[0x3fff-0x3206];
+	u8 mc_sfrdiv;
+	u8 mc_clkdis;
+	u8 mc_swrstz;
+	u8 mc_opctrl;
+	u8 mc_flowctrl;
+	u8 mc_phyrstz;
+	u8 mc_lockonclock;
+	u8 mc_heacphy_rst;
+	u8 reserved8[0x40ff-0x4007];
+	u8 csc_cfg;
+	u8 csc_scale;
+	struct {
+		u8 msb;
+		u8 lsb;
+	} csc_coef[3][4];
+	u8 reserved9[0x7dff-0x4119];
+	u8 i2cm_slave;
+	u8 i2c_address;
+	u8 i2cm_datao;
+	u8 i2cm_datai;
+	u8 i2cm_operation;
+	u8 i2cm_int;
+	u8 i2cm_ctlint;
+	u8 i2cm_div;
+	u8 i2cm_segaddr;
+	u8 i2cm_softrstz;
+	u8 i2cm_segptr;
+	u8 i2cm_ss_scl_hcnt_1_addr;
+	u8 i2cm_ss_scl_hcnt_0_addr;
+	u8 i2cm_ss_scl_lcnt_1_addr;
+	u8 i2cm_ss_scl_lcnt_0_addr;
+	u8 i2cm_fs_scl_hcnt_1_addr;
+	u8 i2cm_fs_scl_hcnt_0_addr;
+	u8 i2cm_fs_scl_lcnt_1_addr;
+	u8 i2cm_fs_scl_lcnt_0_addr;
+	u8 reserved10[0xffff-0x7e12];
+	u32 phy_pol;
+	u32 phy_reserved11[3];
+	u32 phy_read_en;
+	u32 phy_unscramble;
+	u32 reserved12[2];
+	u32 phy_ctrl;
+	u32 phy_unk1;
+	u32 phy_unk2;
+	u32 phy_pll;
+	u32 phy_clk;
+	u32 phy_unk3;
+	u32 phy_status;
+};
+
 /*
  * This is based on the A10s User Manual, and the A10s only supports
  * composite video and not vga like the A10 / A20 does, still other
@@ -347,6 +578,42 @@ struct sunxi_tve_reg {
 #define SUNXI_DE_BE_OUTPUT_COLOR_CTRL_ENABLE	1
 
 /*
+ * DE2 register constants.
+ */
+#define SUNXI_DE2_MUX0_BASE			(u8 *)(SUNXI_DE2_BASE + 0x100000)
+
+#define SUNXI_DE2_MUX_GLB_REGS			0x00000
+#define SUNXI_DE2_MUX_BLD_REGS			0x01000
+#define SUNXI_DE2_MUX_CHAN_REGS			0x02000
+#define	SUNXI_DE2_MUX_CHAN_SZ			0x1000
+#define SUNXI_DE2_MUX_VSU_REGS			0x20000
+#define SUNXI_DE2_MUX_GSU1_REGS			0x30000
+#define SUNXI_DE2_MUX_GSU2_REGS			0x40000
+#define SUNXI_DE2_MUX_GSU3_REGS			0x50000
+#define SUNXI_DE2_MUX_FCE_REGS			0xa0000
+#define SUNXI_DE2_MUX_BWS_REGS			0xa2000
+#define SUNXI_DE2_MUX_LTI_REGS			0xa4000
+#define SUNXI_DE2_MUX_PEAK_REGS			0xa6000
+#define SUNXI_DE2_MUX_ASE_REGS			0xa8000
+#define SUNXI_DE2_MUX_FCC_REGS			0xaa000
+#define SUNXI_DE2_MUX_DCSC_REGS			0xb0000
+
+#define SUNXI_DE2_FORMAT_ARGB_8888		0
+#define SUNXI_DE2_FORMAT_BGRA_8888		3
+#define SUNXI_DE2_FORMAT_XRGB_8888		4
+#define SUNXI_DE2_FORMAT_RGB_888		8
+#define SUNXI_DE2_FORMAT_BGR_888		9
+
+#define SUNXI_DE2_MUX_GLB_CTL_RT_EN		(1 << 0)
+
+#define SUNXI_DE2_UI_CFG_ATTR_EN		(1 << 0)
+#define SUNXI_DE2_UI_CFG_ATTR_ALPMOD(m)		((m & 3) << 1)
+#define SUNXI_DE2_UI_CFG_ATTR_FMT(f)		((f & 0xf) << 8)
+#define SUNXI_DE2_UI_CFG_ATTR_ALPHA(a)		((a & 0xff) << 24)
+
+#define SUNXI_DE2_WH(w, h)			(((h - 1) << 16) | (w - 1))
+
+/*
  * LCDC register constants.
  */
 #define SUNXI_LCDC_X(x)				(((x) - 1) << 16)
@@ -403,6 +670,7 @@ struct sunxi_tve_reg {
 #define SUNXI_LCDC_LVDS_ANA1_INIT1		(0x1f << 26 | 0x1f << 10)
 #define SUNXI_LCDC_LVDS_ANA1_INIT2		(0x1f << 16 | 0x1f << 00)
 
+#ifndef CONFIG_SUNXI_DE2
 /*
  * HDMI register constants.
  */
@@ -496,6 +764,42 @@ struct sunxi_tve_reg {
 
 #define SUNXI_HMDI_DDC_LINE_CTRL_SCL_ENABLE	(1 << 8)
 #define SUNXI_HMDI_DDC_LINE_CTRL_SDA_ENABLE	(1 << 9)
+#else /* !CONFIG_SUNXI_DE2 */
+/*
+ * DesignWare HDMI register constants.
+ */
+#define HDMI_IH_MUTE_MUTE_WAKEUP_INTERRUPT	0x02
+#define HDMI_IH_MUTE_MUTE_ALL_INTERRUPT		0x01
+
+#define HDMI_TX_INSTUFFING_BDBDATA_STUFFING_EN	0x04
+#define HDMI_TX_INSTUFFING_RCRDATA_STUFFING_EN	0x02
+#define HDMI_TX_INSTUFFING_GYDATA_STUFFING_EN	0x01
+
+#define HDMI_FC_INVIDCONF_DVI_MODE_HDMI		0x08
+#define HDMI_FC_INVIDCONF_DE_IN_POL_ACTIVE_HIGH 0x10
+
+#define HDMI_FC_AVICONF0_ACTIVE_FORMAT		0x40
+#define HDMI_FC_AVICONF0_SCAN_INFO_UNDERSCAN	0x20
+
+#define HDMI_FC_AVICONF2_RGB_QUANT_FULL_RANGE	0x08
+#define HDMI_FC_AVICONF2_IT_CONTENT_VALID	0x80
+
+#define HDMI_MC_CLKDIS_TMDSCLK_DISABLE		0x02
+
+#define HDMI_MC_FLOWCTRL_CSC_BYPASS		0x00
+
+#define HDMI_I2CM_CTLINT_ADDR_NACK_POL		0x80
+#define HDMI_I2CM_CTLINT_ADDR_NACK_MSK		0x40
+#define HDMI_I2CM_CTLINT_ADDR_ARB_POL		0x08
+#define HDMI_I2CM_CTLINT_ADDR_ARB_MSK		0x04
+
+#define HMDI_DDC_CTRL_RESET			(1 << 0)
+#define HMDI_DDC_ADDR_SLAVE_ADDR		(0x50 << 0)
+#define HMDI_DDC_ADDR_SEG_ADDR			(0x30 << 0)
+
+#define SUNXI_HDMI_HPD_DETECT			(1 << 19)
+
+#endif /* !CONFIG_SUNXI_DE2 */
 
 /*
  * TVE register constants.

@@ -67,6 +67,7 @@ const struct ctfb_res_modes composite_video_modes[2] = {
 
 #ifdef CONFIG_VIDEO_HDMI
 
+#ifndef CONFIG_SUNXI_DE2
 /*
  * Wait up to 200ms for value to be set in given part of reg.
  */
@@ -294,9 +295,299 @@ static int sunxi_hdmi_edid_get_mode(struct ctfb_res_modes *mode)
 
 	return 0;
 }
+#else /* !CONFIG_SUNXI_DE2 */
+static void sunxi_hdmi_phy_init(void)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	unsigned long tmo;
+	u32 tmp;
+
+	/*
+	 * HDMI PHY settings are taken as-is from Allwinner BSP code.
+	 * There is no documentation.
+	 */
+	writel(0, &hdmi->phy_ctrl);
+	setbits_le32(&hdmi->phy_ctrl, BIT(0));
+	udelay(5);
+	setbits_le32(&hdmi->phy_ctrl, BIT(16));
+	setbits_le32(&hdmi->phy_ctrl, BIT(1));
+	udelay(10);
+	setbits_le32(&hdmi->phy_ctrl, BIT(2));
+	udelay(5);
+	setbits_le32(&hdmi->phy_ctrl, BIT(3));
+	udelay(40);
+	setbits_le32(&hdmi->phy_ctrl, BIT(19));
+	udelay(100);
+	setbits_le32(&hdmi->phy_ctrl, BIT(18));
+	setbits_le32(&hdmi->phy_ctrl, 7 << 4);
+
+	/* Note that Allwinner code doesn't fail in case of timeout */
+	tmo = timer_get_us() + 2000;
+	while ((readl(&hdmi->phy_status) & 0x80) == 0) {
+		if (timer_get_us() > tmo) {
+			printf("Warning: HDMI PHY init timeout!\n");
+			break;
+		}
+	}
+
+	setbits_le32(&hdmi->phy_ctrl, 0xf << 8);
+	setbits_le32(&hdmi->phy_ctrl, BIT(7));
+
+	writel(0x39dc5040, &hdmi->phy_pll);
+	writel(0x80084343, &hdmi->phy_clk);
+	udelay(10000);
+	writel(1, &hdmi->phy_unk3);
+	setbits_le32(&hdmi->phy_pll, BIT(25));
+	udelay(100000);
+	tmp = (readl(&hdmi->phy_status) & 0x1f800) >> 11;
+	setbits_le32(&hdmi->phy_pll, BIT(31) | BIT(30));
+	setbits_le32(&hdmi->phy_pll, tmp);
+	writel(0x01FF0F7F, &hdmi->phy_ctrl);
+	writel(0x80639000, &hdmi->phy_unk1);
+	writel(0x0F81C405, &hdmi->phy_unk2);
+
+	/* enable read access to HDMI controller */
+	writel(0x54524545, &hdmi->phy_read_en);
+	/* descramble register offsets */
+	writel(0x42494E47, &hdmi->phy_unscramble);
+}
+
+static void sunxi_hdmi_ctrl_init(void)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+
+	/* soft reset HDMI controller */
+	writeb(0x00, &hdmi->mc_swrstz);
+
+	udelay(1);
+
+	writeb(HDMI_IH_MUTE_MUTE_WAKEUP_INTERRUPT |
+	       HDMI_IH_MUTE_MUTE_ALL_INTERRUPT,
+	       &hdmi->ih_mute);
+	writeb(HDMI_I2CM_CTLINT_ADDR_NACK_POL |
+	       HDMI_I2CM_CTLINT_ADDR_NACK_MSK |
+	       HDMI_I2CM_CTLINT_ADDR_ARB_POL |
+	       HDMI_I2CM_CTLINT_ADDR_ARB_MSK,
+	       &hdmi->i2cm_ctlint);
+	writeb(0xff & ~HDMI_MC_CLKDIS_TMDSCLK_DISABLE,
+	       &hdmi->mc_clkdis);
+}
+
+static int sunxi_hdmi_hpd_detect(int hpd_delay)
+{
+	struct sunxi_ccm_reg * const ccm =
+		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	unsigned long tmo = timer_get_us() + hpd_delay * 1000;
+	int status = 0;
+
+	/* Set pll3 to 297 MHz */
+	clock_set_pll3(297000000);
+
+	/* Set hdmi parent to pll3 */
+	clrsetbits_le32(&ccm->hdmi_clk_cfg, CCM_HDMI_CTRL_PLL_MASK,
+			CCM_HDMI_CTRL_PLL3);
+
+	/* Set ahb gating to pass */
+	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_HDMI);
+	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_HDMI2);
+	setbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_HDMI);
+	setbits_le32(&ccm->hdmi_slow_clk_cfg, CCM_HDMI_SLOW_CTRL_DDC_GATE);
+
+	/* Clock on */
+	setbits_le32(&ccm->hdmi_clk_cfg, CCM_HDMI_CTRL_GATE);
+
+	sunxi_hdmi_phy_init();
+	sunxi_hdmi_ctrl_init();
+
+	while (timer_get_us() < tmo) {
+		if (readl(&hdmi->phy_status) & SUNXI_HDMI_HPD_DETECT) {
+			status = 1;
+			break;
+		}
+	}
+
+	return status;
+}
+
+static void sunxi_hdmi_shutdown(void)
+{
+	struct sunxi_ccm_reg * const ccm =
+		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+
+	writel(0, &hdmi->phy_ctrl);
+	clrbits_le32(&ccm->hdmi_clk_cfg, CCM_HDMI_CTRL_GATE);
+	clrbits_le32(&ccm->hdmi_slow_clk_cfg, CCM_HDMI_SLOW_CTRL_DDC_GATE);
+	clrbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_HDMI);
+	clrbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_HDMI);
+	clrbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_HDMI2);
+	clock_set_pll3(0);
+}
+
+static int sunxi_hdmi_ddc_wait_i2c_done(int msec)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	u32 val;
+	ulong start;
+
+	start = get_timer(0);
+	do {
+		val = readb(&hdmi->ih_i2cm_stat0);
+		writeb(val, &hdmi->ih_i2cm_stat0);
+
+		if (val & 0x2)
+			return 0;
+		if (val & 0x1)
+			return -EIO;
+
+		udelay(100);
+	} while (get_timer(start) < msec);
+
+	return 1;
+}
+
+static int sunxi_hdmi_ddc_read(int block, u8 *buf)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	int shift = (block % 2) * 0x80;
+	int trytime = 5;
+	int edid_read_err = 0;
+	u32 op = (block == 0) ? 1 : 2;
+	int n;
+
+	writeb(block >> 1, &hdmi->i2cm_segptr);
+
+	while (trytime--) {
+		edid_read_err = 0;
+
+		for (n = 0; n < 128; n++) {
+			writeb(shift + n, &hdmi->i2c_address);
+			writeb(op, &hdmi->i2cm_operation);
+
+			if (sunxi_hdmi_ddc_wait_i2c_done(10)) {
+				edid_read_err = 1;
+				break;
+			}
+
+			*buf++ = readb(&hdmi->i2cm_datai);
+		}
+
+		if (!edid_read_err)
+			break;
+	}
+
+	return edid_read_err;
+}
+
+static int sunxi_hdmi_edid_get_block(int block, u8 *buf)
+{
+	int r, retries = 2;
+
+	do {
+		r = sunxi_hdmi_ddc_read(block, buf);
+		if (r)
+			continue;
+		r = edid_check_checksum(buf);
+		if (r) {
+			printf("EDID block %d: checksum error%s\n",
+			       block, retries ? ", retrying" : "");
+		}
+	} while (r && retries--);
+
+	return r;
+}
+
+static int sunxi_hdmi_edid_get_mode(struct ctfb_res_modes *mode)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	struct edid1_info edid1;
+	struct edid_cea861_info cea681[4];
+	struct edid_detailed_timing *t =
+		(struct edid_detailed_timing *)edid1.monitor_details.timing;
+	int i, r, ext_blocks = 0;
+
+	/* Reset i2c controller */
+	writeb(0, &hdmi->i2cm_softrstz);
+
+	writeb(0x05, &hdmi->i2cm_div);
+	writeb(0x08, &hdmi->i2cm_int);
+
+	/* set DDC timing*/
+	writeb(0xd8, &hdmi->i2cm_ss_scl_hcnt_0_addr);
+	writeb(0xfe, &hdmi->i2cm_ss_scl_lcnt_0_addr);
+
+	writeb(HMDI_DDC_ADDR_SLAVE_ADDR, &hdmi->i2cm_slave);
+	writeb(HMDI_DDC_ADDR_SEG_ADDR, &hdmi->i2cm_segaddr);
+
+	r = sunxi_hdmi_edid_get_block(0, (u8 *)&edid1);
+	if (r == 0) {
+		r = edid_check_info(&edid1);
+		if (r) {
+			printf("EDID: invalid EDID data\n");
+			r = -EINVAL;
+		}
+	}
+	if (r == 0) {
+		ext_blocks = edid1.extension_flag;
+		if (ext_blocks > 4)
+			ext_blocks = 4;
+		for (i = 0; i < ext_blocks; i++) {
+			if (sunxi_hdmi_edid_get_block(1 + i,
+						(u8 *)&cea681[i]) != 0) {
+				ext_blocks = i;
+				break;
+			}
+		}
+	}
+
+	if (r)
+		return r;
+
+	/* We want version 1.3 or 1.2 with detailed timing info */
+	if (edid1.version != 1 || (edid1.revision < 3 &&
+			!EDID1_INFO_FEATURE_PREFERRED_TIMING_MODE(edid1))) {
+		printf("EDID: unsupported version %d.%d\n",
+		       edid1.version, edid1.revision);
+		return -EINVAL;
+	}
+
+	/* Take the first usable detailed timing */
+	for (i = 0; i < 4; i++, t++) {
+		r = video_edid_dtd_to_ctfb_res_modes(t, mode);
+		if (r == 0)
+			break;
+	}
+	if (i == 4) {
+		printf("EDID: no usable detailed timing found\n");
+		return -ENOENT;
+	}
+
+	/* Check for basic audio support, if found enable hdmi output */
+	sunxi_display.monitor = sunxi_monitor_dvi;
+	for (i = 0; i < ext_blocks; i++) {
+		if (cea681[i].extension_tag != EDID_CEA861_EXTENSION_TAG ||
+		    cea681[i].revision < 2)
+			continue;
+
+		if (EDID_CEA861_SUPPORTS_BASIC_AUDIO(cea681[i]))
+			sunxi_display.monitor = sunxi_monitor_hdmi;
+	}
+
+	return 0;
+}
+#endif /* !CONFIG_SUNXI_DE2 */
 
 #endif /* CONFIG_VIDEO_HDMI */
 
+#ifndef CONFIG_SUNXI_DE2
 #ifdef CONFIG_MACH_SUN4I
 /*
  * Testing has shown that on sun4i the display backend engine does not have
@@ -404,6 +695,7 @@ static void sunxi_frontend_mode_set(const struct ctfb_res_modes *mode,
 				    unsigned int address) {}
 static void sunxi_frontend_enable(void) {}
 #endif
+#endif /* !CONFIG_SUNXI_DE2 */
 
 static bool sunxi_is_composite(void)
 {
@@ -424,6 +716,7 @@ static bool sunxi_is_composite(void)
 	return false; /* Never reached */
 }
 
+#ifndef CONFIG_SUNXI_DE2
 /*
  * This is the entity that mixes and matches the different layers and inputs.
  * Allwinner calls it the back-end, but i like composer better.
@@ -512,6 +805,123 @@ static void sunxi_composer_enable(void)
 	setbits_le32(&de_be->reg_ctrl, SUNXI_DE_BE_REG_CTRL_LOAD_REGS);
 	setbits_le32(&de_be->mode, SUNXI_DE_BE_MODE_START);
 }
+#else /* !CONFIG_SUNXI_DE2 */
+/*
+ * This is the entity that mixes and matches the different layers and inputs.
+ * Allwinner calls it display engine, but here is called composer.
+ */
+static void sunxi_composer_init(void)
+{
+	struct sunxi_ccm_reg * const ccm =
+		(struct sunxi_ccm_reg *)SUNXI_CCM_BASE;
+
+	clock_set_pll10(432000000);
+
+	/* Set DE parent to pll10 */
+	clrsetbits_le32(&ccm->de_clk_cfg, CCM_DE2_CTRL_PLL_MASK,
+			CCM_DE2_CTRL_PLL10);
+
+	/* Set ahb gating to pass */
+	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_DE);
+	setbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_DE);
+
+	/* Clock on */
+	setbits_le32(&ccm->de_clk_cfg, CCM_DE2_CTRL_GATE);
+}
+
+static void sunxi_composer_mode_set(const struct ctfb_res_modes *mode,
+				    unsigned int address)
+{
+	struct de_clk * const de_clk_regs =
+		(struct de_clk *)(SUNXI_DE2_BASE);
+	struct de_glb * const de_glb_regs =
+		(struct de_glb *)(SUNXI_DE2_MUX0_BASE +
+				  SUNXI_DE2_MUX_GLB_REGS);
+	struct de_bld * const de_bld_regs =
+		(struct de_bld *)(SUNXI_DE2_MUX0_BASE +
+				  SUNXI_DE2_MUX_BLD_REGS);
+	struct de_ui * const de_ui_regs =
+		(struct de_ui *)(SUNXI_DE2_MUX0_BASE +
+				 SUNXI_DE2_MUX_CHAN_REGS +
+				 SUNXI_DE2_MUX_CHAN_SZ * 1);
+	u32 size = SUNXI_DE2_WH(mode->xres, mode->yres);
+	int channel, i;
+	u32 data;
+
+	/* enable clock */
+	setbits_le32(&de_clk_regs->rst_cfg, 1);
+	setbits_le32(&de_clk_regs->gate_cfg, 1);
+	setbits_le32(&de_clk_regs->bus_cfg, 1);
+
+	clrbits_le32(&de_clk_regs->sel_cfg, 1);
+
+	writel(SUNXI_DE2_MUX_GLB_CTL_RT_EN, &de_glb_regs->ctl);
+	writel(0, &de_glb_regs->status);
+	writel(1, &de_glb_regs->dbuff);
+	writel(size, &de_glb_regs->size);
+
+	for (channel = 0; channel < 4; channel++) {
+		void *chan = SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_CHAN_REGS +
+			SUNXI_DE2_MUX_CHAN_SZ * channel;
+		memset(chan, 0, channel == 0 ?
+			sizeof(struct de_vi) : sizeof(struct de_ui));
+	}
+	memset(de_bld_regs, 0, sizeof(struct de_bld));
+
+	writel(0x00000101, &de_bld_regs->fcolor_ctl);
+
+	writel(1, &de_bld_regs->route);
+
+	writel(0, &de_bld_regs->premultiply);
+	writel(0xff000000, &de_bld_regs->bkcolor);
+
+	writel(0x03010301, &de_bld_regs->bld_mode[0]);
+	writel(0x03010301, &de_bld_regs->bld_mode[1]);
+
+	writel(size, &de_bld_regs->output_size);
+	writel(mode->vmode & FB_VMODE_INTERLACED ? 2 : 0,
+	       &de_bld_regs->out_ctl);
+	writel(0, &de_bld_regs->ck_ctl);
+
+	for (i = 0; i < 4; i++) {
+		writel(0xff000000, &de_bld_regs->attr[i].fcolor);
+		writel(size, &de_bld_regs->attr[i].insize);
+	}
+
+	/* Disable all other units */
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_VSU_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_GSU1_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_GSU2_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_GSU3_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_FCE_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_BWS_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_LTI_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_PEAK_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_ASE_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_FCC_REGS);
+	writel(0, SUNXI_DE2_MUX0_BASE + SUNXI_DE2_MUX_DCSC_REGS);
+
+	data = SUNXI_DE2_UI_CFG_ATTR_EN |
+	       SUNXI_DE2_UI_CFG_ATTR_FMT(SUNXI_DE2_FORMAT_XRGB_8888) |
+	       SUNXI_DE2_UI_CFG_ATTR_ALPMOD(1) |
+	       SUNXI_DE2_UI_CFG_ATTR_ALPHA(0xff);
+	writel(data, &de_ui_regs->cfg[0].attr);
+	writel(size, &de_ui_regs->cfg[0].size);
+	writel(0, &de_ui_regs->cfg[0].coord);
+	writel(4 * mode->xres, &de_ui_regs->cfg[0].pitch);
+	writel(address, &de_ui_regs->cfg[0].top_laddr);
+	writel(size, &de_ui_regs->ovl_size);
+}
+
+static void sunxi_composer_enable(void)
+{
+	struct de_glb * const de_glb_regs =
+		(struct de_glb *)(SUNXI_DE2_MUX0_BASE +
+				  SUNXI_DE2_MUX_GLB_REGS);
+
+	writel(1, &de_glb_regs->dbuff);
+}
+#endif /* !CONFIG_SUNXI_DE2 */
 
 /*
  * LCDC, what allwinner calls a CRTC, so timing controller and serializer.
@@ -525,6 +935,66 @@ static void sunxi_lcdc_pll_set(int tcon, int dotclock,
 	int best_n = 0, best_m = 0, best_diff = 0x0FFFFFFF;
 	int best_double = 0;
 	bool use_mipi_pll = false;
+
+#if defined CONFIG_SUNXI_DE2 && defined CONFIG_VIDEO_HDMI
+	/* As H3 do not support LCD, the TCON0 is like other SoCs' TCON1 */
+#ifndef CONFIG_MACH_SUN8I_H3
+	if (tcon == 1)
+#endif
+	{
+		int x;
+
+		/*
+		 * Due to unknown registers in HDMI PHY, we know correct
+		 * settings only for following four PHY dividers. Select one
+		 * based on clock speed.
+		 */
+		if (dotclock <= 27000)
+			x = 11;
+		else if (dotclock <= 74250)
+			x = 4;
+		else if (dotclock <= 148500)
+			x = 2;
+		else
+			x = 1;
+
+		/*
+		 * Find the lowest divider resulting in a matching clock. If
+		 * there is no match, pick the closest lower clock, as
+		 * monitors tend to not sync to higher frequencies.
+		 */
+		for (m = 1; m <= 16; m++) {
+			n = (m * x * dotclock) / 24000;
+
+			if ((n >= 1) && (n <= 128)) {
+				value = (24000 * n) / m / x;
+				diff = dotclock - value;
+				if (diff < best_diff) {
+					best_diff = diff;
+					best_m = m;
+					best_n = n;
+				}
+			}
+		}
+
+		clock_set_pll3_factors(best_m, best_n);
+		debug("dotclock: %dkHz = %dkHz: (24MHz * %d) / %d / %d\n",
+		      dotclock, (clock_get_pll3() / 1000) / x,
+		      best_n, best_m, x);
+
+#ifndef CONFIG_MACH_SUN8I_H3
+		writel(CCM_TCON0_CTRL_GATE | CCM_TCON0_CTRL_M(x),
+		       &ccm->lcd1_ch0_clk_cfg);
+#else
+		writel(CCM_TCON0_CTRL_GATE | CCM_TCON0_CTRL_M(x),
+		       &ccm->lcd0_ch0_clk_cfg);
+#endif
+
+		*clk_div = x;
+		*clk_double = 0; /* not used */
+		return;
+	}
+#endif /* CONFIG_SUNXI_DE2 && CONFIG_VIDEO_HDMI */
 
 	if (tcon == 0) {
 #ifdef CONFIG_VIDEO_LCD_IF_PARALLEL
@@ -937,6 +1407,7 @@ static void sunxi_lcdc_tcon1_mode_set(const struct ctfb_res_modes *mode,
 
 #ifdef CONFIG_VIDEO_HDMI
 
+#ifndef CONFIG_SUNXI_DE2
 static void sunxi_hdmi_setup_info_frames(const struct ctfb_res_modes *mode)
 {
 	struct sunxi_hdmi_reg * const hdmi =
@@ -1044,6 +1515,207 @@ static void sunxi_hdmi_enable(void)
 	udelay(100);
 	setbits_le32(&hdmi->video_ctrl, SUNXI_HDMI_VIDEO_CTRL_ENABLE);
 }
+#else /* !CONFIG_SUNXI_DE2 */
+static void sunxi_hdmi_setup_info_frames(const struct ctfb_res_modes *mode)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	u8 tmp;
+
+	if (mode->pixclock_khz <= 27000)
+		tmp = 0x40; /* SD-modes, ITU601 colorspace */
+	else
+		tmp = 0x80; /* HD-modes, ITU709 colorspace */
+
+	if (mode->xres * 100 / mode->yres < 156)
+		tmp |= 0x18;  /* 4 : 3 */
+	else
+		tmp |= 0x28; /* 16 : 9 */
+
+	setbits_8(&hdmi->fc_invidconf,
+		  HDMI_FC_INVIDCONF_DVI_MODE_HDMI);
+	writeb(HDMI_FC_AVICONF0_ACTIVE_FORMAT |
+	       HDMI_FC_AVICONF0_SCAN_INFO_UNDERSCAN,
+	       &hdmi->fc_aviconf0);
+	writeb(tmp, &hdmi->fc_aviconf1);
+	writeb(HDMI_FC_AVICONF2_RGB_QUANT_FULL_RANGE |
+	       HDMI_FC_AVICONF2_IT_CONTENT_VALID,
+	       &hdmi->fc_aviconf2);
+}
+
+static void sunxi_hdmi_phy_set(u32 divider)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	u32 tmp;
+
+	/*
+	 * Unfortunatelly, we don't know much about those magic
+	 * numbers. They are taken from Allwinner BSP driver.
+	 */
+	switch (divider) {
+	case 1:
+		writel(0x30dc5fc0, &hdmi->phy_pll);
+		writel(0x800863C0, &hdmi->phy_clk);
+		mdelay(10);
+		writel(0x00000001, &hdmi->phy_unk3);
+		setbits_le32(&hdmi->phy_pll, BIT(25));
+		mdelay(200);
+		tmp = (readl(&hdmi->phy_status) & 0x1f800) >> 11;
+		setbits_le32(&hdmi->phy_pll, BIT(31) | BIT(30));
+		if (tmp < 0x3d)
+			setbits_le32(&hdmi->phy_pll, tmp + 2);
+		else
+			setbits_le32(&hdmi->phy_pll, 0x3f);
+		mdelay(100);
+		writel(0x01FFFF7F, &hdmi->phy_ctrl);
+		writel(0x8063b000, &hdmi->phy_unk1);
+		writel(0x0F8246B5, &hdmi->phy_unk2);
+		break;
+	case 2:
+		writel(0x39dc5040, &hdmi->phy_pll);
+		writel(0x80084381, &hdmi->phy_clk);
+		mdelay(10);
+		writel(0x00000001, &hdmi->phy_unk3);
+		setbits_le32(&hdmi->phy_pll, BIT(25));
+		mdelay(100);
+		tmp = (readl(&hdmi->phy_status) & 0x1f800) >> 11;
+		setbits_le32(&hdmi->phy_pll, BIT(31) | BIT(30));
+		setbits_le32(&hdmi->phy_pll, tmp);
+		writel(0x01FFFF7F, &hdmi->phy_ctrl);
+		writel(0x8063a800, &hdmi->phy_unk1);
+		writel(0x0F81C485, &hdmi->phy_unk2);
+		break;
+	case 4:
+		writel(0x39dc5040, &hdmi->phy_pll);
+		writel(0x80084343, &hdmi->phy_clk);
+		mdelay(10);
+		writel(0x00000001, &hdmi->phy_unk3);
+		setbits_le32(&hdmi->phy_pll, BIT(25));
+		mdelay(100);
+		tmp = (readl(&hdmi->phy_status) & 0x1f800) >> 11;
+		setbits_le32(&hdmi->phy_pll, BIT(31) | BIT(30));
+		setbits_le32(&hdmi->phy_pll, tmp);
+		writel(0x01FFFF7F, &hdmi->phy_ctrl);
+		writel(0x8063b000, &hdmi->phy_unk1);
+		writel(0x0F81C405, &hdmi->phy_unk2);
+		break;
+	case 11:
+		writel(0x39dc5040, &hdmi->phy_pll);
+		writel(0x8008430a, &hdmi->phy_clk);
+		mdelay(10);
+		writel(0x00000001, &hdmi->phy_unk3);
+		setbits_le32(&hdmi->phy_pll, BIT(25));
+		mdelay(100);
+		tmp = (readl(&hdmi->phy_status) & 0x1f800) >> 11;
+		setbits_le32(&hdmi->phy_pll, BIT(31) | BIT(30));
+		setbits_le32(&hdmi->phy_pll, tmp);
+		writel(0x01FFFF7F, &hdmi->phy_ctrl);
+		writel(0x8063b000, &hdmi->phy_unk1);
+		writel(0x0F81C405, &hdmi->phy_unk2);
+		break;
+	}
+}
+
+/* clk_double is unused for DE2 and DW HDMI */
+static void sunxi_hdmi_mode_set(const struct ctfb_res_modes *mode,
+				int clk_div, int clk_double)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+	u8 invidconf, v_blanking;
+	u32 h_blanking;
+
+	sunxi_hdmi_phy_set(clk_div);
+
+	invidconf = 0;
+	if (mode->vmode & FB_VMODE_INTERLACED)
+		invidconf |= 0x01;
+	if (mode->sync & FB_SYNC_HOR_HIGH_ACT)
+		invidconf |= 0x20;
+	if (mode->sync & FB_SYNC_VERT_HIGH_ACT)
+		invidconf |= 0x40;
+
+	h_blanking = mode->left_margin + mode->right_margin + mode->hsync_len;
+	v_blanking = mode->upper_margin + mode->lower_margin + mode->vsync_len;
+
+	writeb(invidconf |
+	       HDMI_FC_INVIDCONF_DE_IN_POL_ACTIVE_HIGH,
+	       &hdmi->fc_invidconf);
+	if (invidconf < 96)
+		setbits_le32(&hdmi->phy_pol, 0x300);
+
+	writeb(mode->xres, &hdmi->fc_inhactv0);
+	writeb(mode->xres >> 8, &hdmi->fc_inhactv1);
+	writeb(h_blanking, &hdmi->fc_inhblank0);
+	writeb(h_blanking >> 8, &hdmi->fc_inhblank1);
+	writeb(mode->yres, &hdmi->fc_invactv0);
+	writeb(mode->yres >> 8, &hdmi->fc_invactv1);
+	writeb(v_blanking, &hdmi->fc_invblank);
+	writeb(mode->right_margin, &hdmi->fc_hsyncindelay0);
+	writeb(mode->right_margin >> 8, &hdmi->fc_hsyncindelay1);
+	writeb(mode->hsync_len, &hdmi->fc_hsyncinwidth0);
+	writeb(mode->hsync_len >> 8, &hdmi->fc_hsyncinwidth1);
+	writeb(mode->lower_margin, &hdmi->fc_vsyncindelay);
+	writeb(mode->vsync_len, &hdmi->fc_vsyncinwidth);
+
+	/* control period minimum duration */
+	writeb(0x0c, &hdmi->fc_ctrldur);
+	writeb(0x20, &hdmi->fc_exctrldur);
+	writeb(0x01, &hdmi->fc_exctrlspac);
+
+	/* set to fill tmds data channels */
+	writeb(0x0b, &hdmi->fc_ch0pream);
+	writeb(0x16, &hdmi->fc_ch1pream);
+	writeb(0x21, &hdmi->fc_ch2pream);
+
+	writeb(0x40, &hdmi->vp_pr_cd);
+	writeb(0x07, &hdmi->vp_stuff);
+	writeb(0x00, &hdmi->vp_remap);
+	writeb(0x47, &hdmi->vp_conf);
+
+	writeb(0x01, &hdmi->tx_invid0);
+
+	/* enable tx stuffing: when de is inactive, fix the output data to 0 */
+	writeb(HDMI_TX_INSTUFFING_BDBDATA_STUFFING_EN |
+	       HDMI_TX_INSTUFFING_RCRDATA_STUFFING_EN |
+	       HDMI_TX_INSTUFFING_GYDATA_STUFFING_EN,
+	       &hdmi->tx_instuffing);
+	writeb(0x00, &hdmi->tx_gydata0);
+	writeb(0x00, &hdmi->tx_gydata1);
+	writeb(0x00, &hdmi->tx_rcrdata0);
+	writeb(0x00, &hdmi->tx_rcrdata1);
+	writeb(0x00, &hdmi->tx_bcbdata0);
+	writeb(0x00, &hdmi->tx_bcbdata1);
+
+	if (sunxi_display.monitor == sunxi_monitor_hdmi)
+		sunxi_hdmi_setup_info_frames(mode);
+
+	writeb(HDMI_MC_FLOWCTRL_CSC_BYPASS, &hdmi->mc_flowctrl);
+	/* enable audio, TMDS and pixel clock */
+	writeb(0x74, &hdmi->mc_clkdis);
+
+	/*
+	 * This is last hdmi access before boot,
+	 * so scramble addresses again. Othwerwise
+	 * BSP or current DRM driver won't work.
+	 * Dummy read is needed or otherwise last
+	 * write doesn't get written correctly.
+	 */
+	(void)readb(&hdmi->reserved0[0]);
+	writel(0, &hdmi->phy_unscramble);
+}
+
+static void sunxi_hdmi_enable(void)
+{
+	struct sunxi_dwc_hdmi * const hdmi =
+		(struct sunxi_dwc_hdmi *)SUNXI_HDMI_BASE;
+
+	setbits_le32(&hdmi->phy_ctrl, 0xf << 12);
+	printf("hdmi enabled\n");
+}
+
+#endif /* !CONFIG_SUNXI_DE2 */
 
 #endif /* CONFIG_VIDEO_HDMI */
 
