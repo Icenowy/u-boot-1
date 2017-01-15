@@ -470,7 +470,7 @@ config AXP_GPIO
 
 config VIDEO
 	bool "Enable graphical uboot console on HDMI, LCD or VGA"
-	depends on !MACH_SUN8I_A83T && !MACH_SUN8I_H3 && !MACH_SUN9I && !MACH_SUN50I
+	depends on !MACH_SUN8I_A83T && !MACH_SUN9I && !MACH_SUN50I
 	default y
 	---help---
 	Say Y here to add support for using a cfb console on the HDMI, LCD
@@ -479,7 +479,7 @@ config VIDEO
 
 config VIDEO_HDMI
 	bool "HDMI output support"
-	depends on VIDEO && !MACH_SUN8I
+	depends on VIDEO && !MACH_SUN8I_A23 && !MACH_SUN8I_A33
 	default y
 	---help---
 	Say Y here to add support for outputting video over HDMI.
@@ -493,7 +493,7 @@ config VIDEO_VGA
 
 config VIDEO_VGA_VIA_LCD
 	bool "VGA via LCD controller support"
-	depends on VIDEO && (MACH_SUN5I || MACH_SUN6I || MACH_SUN8I)
+	depends on VIDEO && (MACH_SUN5I || MACH_SUN6I || MACH_SUN8I) && !MACH_SUN8I_H3
 	default n
 	---help---
 	Say Y here to add support for external DACs connected to the parallel
@@ -619,7 +619,7 @@ config VIDEO_LCD_IF_LVDS
 
 choice
 	prompt "LCD panel support"
-	depends on VIDEO
+	depends on VIDEO && !MACH_SUN8I_H3
 	---help---
 	Select which type of LCD panel to support.
 
